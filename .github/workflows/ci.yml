@@ -49,7 +49,7 @@ jobs:
       # >= 90 gate enforces alongside lines (D-010 amendment, 2026-09-18).
       - name: Coverage gate (>= 90% lines AND regions on recall-core)
         run: >
-          cargo llvm-cov -p recall-core
+          cargo llvm-cov -p recall-mcp-core
           --fail-under-lines 90 --fail-under-regions 90
           --lcov --output-path lcov.info
       - name: Upload coverage report
