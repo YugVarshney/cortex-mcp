@@ -1,0 +1,18 @@
+# cargo-mutants configuration (adversarial review AR-006).
+#
+# Mutation testing gates the review-named pure-logic modules: the crypto
+# primitives (digest truncation, nonce/AAD construction, prefix checks) and
+# the score fusion math (mul_add ordering, clamp bounds, age clamp). The
+# axum/rmcp/CLI shells are excluded: they are covered by integration and
+# conformance tests, and mutating glue buys noise, not power.
+#
+# cargo-mutants 27.x selects files with --file globs (no config key), so the
+# recorded run is:
+#   cargo mutants --in-place \
+#     -f 'crates/recall-core/src/crypto.rs' \
+#     -f 'crates/recall-core/src/scorer.rs'
+# In-place mode reuses the shared target/ directory (the default copied-tree
+# mode needs several GB of spare disk) and implies -j 1.
+# Results are recorded honestly in docs/EVALUATION.md; survived mutants in
+# these modules are either fixed (new test) or explicitly justified there.
+timeout_multiplier = 3.0
