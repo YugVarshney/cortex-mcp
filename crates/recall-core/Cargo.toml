@@ -1,0 +1,52 @@
+[package]
+name = "recall-mcp-core"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+repository.workspace = true
+description = "Pure domain layer for Cortex MCP: models, SQLite store with FTS5, embedders, explainable hybrid scorer"
+keywords = ["mcp", "memory", "embeddings", "search", "agent", "cortex"]
+readme = "../../README.md"
+
+[dependencies]
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+base64 = "0.23"
+chacha20poly1305 = "0.11"
+hex = "0.4"
+hkdf = "0.13"
+hmac = "0.13"
+sha2 = "0.11"
+fastembed = { version = "7", default-features = false, features = [
+    "ort-load-dynamic",
+    "hf-hub-rustls-tls",
+], optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+proptest = "1"
+criterion = "0.8"
+
+[[bench]]
+name = "recall_latency"
+harness = false
+
+[features]
+default = []
+# Optional OpenAI-compatible embedding client (ADR-003).
+openai = ["dep:reqwest"]
+# Optional local ONNX embeddings via fastembed/ort (D-013). Requires
+# onnxruntime.dll at runtime (ORT_DYLIB_PATH) — see docs/adr/DECISIONS.md.
+onnx = ["dep:fastembed"]
+
+# The lib target keeps the short name: integration tests and the CLI
+# import recall_core::/recall_server::, while the published package
+# carries the recall-mcp- prefix (see workspace Cargo.toml).
+[lib]
+name = "recall_core"
+path = "src/lib.rs"

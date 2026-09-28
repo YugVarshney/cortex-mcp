@@ -1,0 +1,15 @@
+/target
+node_modules/
+dist/
+playwright-report/
+test-results/
+*.db
+*.db-wal
+*.db-shm
+.env
+spikes/onnx-spike/target/
+spikes/onnx-spike/ort-bin/
+.fastembed_cache/
+mutants.out
+mutants.out.old
+lcov.info
