@@ -1,0 +1,81 @@
+# CI for Recall-MCP (D-010 companion): the linux-gnu runner enforces the
+# llvm-cov coverage gate (lines + regions >= 90); coverage is also measured
+# locally on windows-msvc (windows-gnu lacks the profiler runtime, D-010).
+#
+# Jobs:
+#   1. lint           — cargo fmt --check + clippy -D warnings (ubuntu)
+#   2. test-coverage  — full workspace tests + llvm-cov gate on recall-core
+#   3. windows-gnu    — full workspace tests on the GNU toolchain
+
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: fmt + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test-coverage:
+    name: test + coverage (linux-gnu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Workspace tests
+        run: cargo test --workspace
+      # cargo-llvm-cov (0.9.x) has no --fail-under-branches; branch-level
+      # instrumentation needs nightly rustc (--branch, -Z coverage-options).
+      # Regions are the closest stable-measurable proxy and are what the
+      # >= 90 gate enforces alongside lines (D-010 amendment, 2026-09-18).
+      - name: Coverage gate (>= 90% lines AND regions on recall-core)
+        run: >
+          cargo llvm-cov -p recall-core
+          --fail-under-lines 90 --fail-under-regions 90
+          --lcov --output-path lcov.info
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov
+          path: lcov.info
+
+  windows-gnu:
+    name: test (windows-gnu)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up MSYS2 MINGW64 (gcc for bundled SQLite)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc
+          path-type: inherit
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+      - name: Workspace tests (windows-gnu, D-005 toolchain)
+        run: cargo test --workspace --target x86_64-pc-windows-gnu
