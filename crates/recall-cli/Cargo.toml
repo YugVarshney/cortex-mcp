@@ -1,0 +1,35 @@
+[package]
+name = "recall-mcp-cli"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+repository.workspace = true
+description = "CLI for Cortex MCP: serve (HTTP + MCP), remember, recall, export, import"
+keywords = ["mcp", "memory", "cli", "agent", "cortex"]
+readme = "../../README.md"
+
+[[bin]]
+name = "recall-cli"
+path = "src/main.rs"
+
+[dependencies]
+recall-core = { workspace = true }
+recall-server = { workspace = true }
+axum = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []
+# Forward the optional embedders to the binary so `--embedder onnx|openai`
+# can actually be served (D-003, D-013).
+onnx = ["recall-core/onnx"]
+openai = ["recall-core/openai"]
