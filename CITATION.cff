@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+title: Cortex-MCP
+message: >-
+  If you use Cortex-MCP in your work, please cite it using this
+  metadata.
+type: software
+authors:
+  - given-names: Yug
+    family-names: Varshney
+identifier: cortex-mcp
+version: 0.4.0
+date-released: "2026-09-28"
+license: MIT
+repository-code: "https://github.com/YugVarshney/cortex-mcp"
+abstract: >-
+  A local-first semantic memory broker for AI agents. An MCP server
+  (stdio + streamable-HTTP) exposing remember/recall/forget/update/
+  capture/list tools over one SQLite file, plus a REST API, OpenAPI
+  document, Prometheus metrics, a web UI, and a CLI. Retrieval is a
+  hybrid of BM25 keyword scoring, embedding cosine similarity, recency
+  decay, and pinned boosts, with an explainable score breakdown on
+  every result. Optional encryption at rest (ChaCha20-Poly1305 with
+  HKDF key separation and keyed FTS token digests).
+keywords:
+  - mcp
+  - model-context-protocol
+  - ai-agents
+  - memory
+  - rust
+  - sqlite
+  - local-first
