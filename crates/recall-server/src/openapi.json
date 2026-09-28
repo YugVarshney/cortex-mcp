@@ -1,0 +1,322 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Cortex-MCP HTTP API",
+    "version": "0.1.0",
+    "description": "Cortex local-first semantic memory broker. Hybrid retrieval (BM25 + cosine + recency decay) with explainable score breakdowns. All /v1/* endpoints require the API key when RECALL_MCP_API_KEY is set (Authorization: Bearer or X-API-Key)."
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Liveness probe (never requires auth)",
+        "responses": { "200": { "description": "Server is up", "content": { "application/json": { "schema": { "type": "object" } } } } }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "This document",
+        "responses": { "200": { "description": "OpenAPI 3.1 document" } }
+      }
+    },
+    "/v1/namespaces": {
+      "get": {
+        "summary": "List namespaces",
+        "responses": {
+          "200": {
+            "description": "Namespaces, oldest first",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Namespace" } } } }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a namespace",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } } }
+        },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Namespace" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/memories": {
+      "get": {
+        "summary": "List memories, newest first (paginated)",
+        "parameters": [
+          { "name": "namespace", "in": "query", "schema": { "type": "string" }, "description": "Filter by namespace name" },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 100, "minimum": 1 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0, "minimum": 0 }, "description": "Rows to skip" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Memories page; the X-Total-Count header carries the unpaginated total",
+            "headers": { "X-Total-Count": { "schema": { "type": "integer" }, "description": "Total memories matching the filter" } },
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Memory" } } } }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      },
+      "post": {
+        "summary": "Remember: store a memory (embedded automatically)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NewMemory" } } } },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Memory" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/memories/{id}": {
+      "delete": {
+        "summary": "Forget a memory",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "204": { "description": "Deleted" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "patch": {
+        "summary": "Update a memory in place (text is re-embedded automatically)",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MemoryUpdate" } } }
+        },
+        "responses": {
+          "200": { "description": "Updated memory", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Memory" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/recall": {
+      "post": {
+        "summary": "Hybrid recall with score breakdowns",
+        "description": "total = w_k*norm_bm25 + w_v*cosine + w_r*exp(-days/tau) + pinned_boost",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["namespace", "query"],
+                "properties": {
+                  "namespace": { "type": "string" },
+                  "query": { "type": "string", "minLength": 1 },
+                  "k": { "type": "integer", "minimum": 1, "maximum": 100, "default": 5 },
+                  "tau_days": { "type": ["number", "null"], "exclusiveMinimum": 0, "default": 30, "description": "null disables the recency term" },
+                  "weights": {
+                    "type": "object",
+                    "properties": {
+                      "bm25": { "type": "number", "default": 0.45 },
+                      "vector": { "type": "number", "default": 0.45 },
+                      "recency": { "type": "number", "default": 0.1 }
+                    }
+                  },
+                  "pinned_boost": { "type": "number", "default": 0.2 },
+                  "tags": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "default": [],
+                    "description": "Only return memories carrying ALL of these tags (exact match)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ranked hits, each with its score breakdown",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/RecallHit" } } } }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/stats": {
+      "get": {
+        "summary": "Store statistics",
+        "responses": {
+          "200": { "description": "Counts", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Stats" } } } },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/capture": {
+      "post": {
+        "summary": "Capture an agent transcript as memories (auto-chunked)",
+        "description": "Auto-capture hook scaffold (D-018): each transcript message is split into deterministic chunks (paragraph, then sentence, then hard-wrap boundaries) and stored as memories with source=capture. The namespace is created if missing. Roles become role:<role> tags.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["namespace", "transcript"],
+                "properties": {
+                  "namespace": { "type": "string", "minLength": 1 },
+                  "transcript": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["content"],
+                      "properties": {
+                        "role": { "type": "string", "description": "e.g. user, assistant, system" },
+                        "content": { "type": "string", "minLength": 1 },
+                        "at": { "type": "integer", "description": "message timestamp (unix seconds)" }
+                      }
+                    }
+                  },
+                  "tags": { "type": "array", "items": { "type": "string" }, "default": [], "description": "applied to every captured chunk" },
+                  "max_chunk_chars": { "type": "integer", "minimum": 100, "maximum": 8000, "default": 1000 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Captured memories",
+            "content": { "application/json": { "schema": { "type": "object", "required": ["namespace", "captured", "memories"], "properties": {
+              "namespace": { "type": "string" },
+              "captured": { "type": "integer" },
+              "memories": { "type": "array", "items": { "$ref": "#/components/schemas/Memory" } }
+            } } } }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Prometheus metrics (text exposition 0.0.4)",
+        "description": "Request counters and latencies, embedding timings, store gauges. Requires the API key when one is configured.",
+        "responses": {
+          "200": { "description": "Metrics in text/plain; version=0.0.4" },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "summary": "MCP streamable-HTTP transport",
+        "description": "JSON-RPC endpoint exposing tools remember, recall, update_memory, forget, list_memories (MCP spec 2026-07-28, stateless mode). Same API-key requirement as /v1/*.",
+        "responses": { "200": { "description": "JSON-RPC response" } }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "Error": {
+        "description": "Error",
+        "content": { "application/json": { "schema": { "type": "object", "properties": { "error": { "type": "string" } } } } }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded; includes a Retry-After header in seconds",
+        "content": { "application/json": { "schema": { "type": "object", "properties": { "error": { "type": "string" } } } } }
+      }
+    },
+    "schemas": {
+      "Namespace": {
+        "type": "object",
+        "required": ["id", "name", "created_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "created_at": { "type": "integer", "description": "unix seconds" }
+        }
+      },
+      "Memory": {
+        "type": "object",
+        "required": ["id", "namespace_id", "text", "tags", "source", "pinned", "created_at", "last_accessed_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "namespace_id": { "type": "string" },
+          "text": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "embedding": { "type": ["array", "null"], "items": { "type": "number" } },
+          "source": { "type": "string" },
+          "pinned": { "type": "boolean" },
+          "created_at": { "type": "integer" },
+          "last_accessed_at": { "type": "integer" }
+        }
+      },
+      "NewMemory": {
+        "type": "object",
+        "required": ["namespace", "text"],
+        "properties": {
+          "namespace": { "type": "string" },
+          "text": { "type": "string", "minLength": 1 },
+          "tags": { "type": "array", "items": { "type": "string" }, "default": [] },
+          "source": { "type": ["string", "null"], "default": "agent" },
+          "pinned": { "type": "boolean", "default": false },
+          "created_at": { "type": ["integer", "null"] },
+          "id": { "type": ["string", "null"] },
+          "embedding": { "type": ["array", "null"], "items": { "type": "number" } }
+        }
+      },
+      "MemoryUpdate": {
+        "type": "object",
+        "description": "Partial update: omitted fields stay unchanged. A changed text is re-embedded by the server.",
+        "properties": {
+          "text": { "type": "string", "minLength": 1 },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "source": { "type": "string" },
+          "pinned": { "type": "boolean" }
+        }
+      },
+      "ScoreBreakdown": {
+        "type": "object",
+        "required": ["bm25", "vector", "recency", "pinned_boost", "total"],
+        "properties": {
+          "bm25": { "type": "number", "description": "normalized keyword score in [0,1]" },
+          "vector": { "type": "number", "description": "cosine similarity in [-1,1]" },
+          "recency": { "type": "number", "description": "exp(-days/tau) in (0,1]; 0 when decay disabled" },
+          "pinned_boost": { "type": "number" },
+          "total": { "type": "number" }
+        }
+      },
+      "RecallHit": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Memory" },
+          {
+            "type": "object",
+            "required": ["breakdown"],
+            "properties": { "breakdown": { "$ref": "#/components/schemas/ScoreBreakdown" } }
+          }
+        ]
+      },
+      "Stats": {
+        "type": "object",
+        "required": ["total_namespaces", "total_memories", "pinned_memories", "per_namespace"],
+        "properties": {
+          "total_namespaces": { "type": "integer" },
+          "total_memories": { "type": "integer" },
+          "pinned_memories": { "type": "integer" },
+          "per_namespace": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["namespace", "count"],
+              "properties": { "namespace": { "type": "string" }, "count": { "type": "integer" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

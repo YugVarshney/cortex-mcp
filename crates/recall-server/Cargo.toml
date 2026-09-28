@@ -1,0 +1,36 @@
+[package]
+name = "recall-mcp-server"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+repository.workspace = true
+description = "HTTP API and MCP transports (stdio, streamable-HTTP) for Cortex MCP"
+keywords = ["mcp", "memory", "server", "axum", "agent", "cortex"]
+readme = "../../README.md"
+
+[dependencies]
+recall-core = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rmcp = { workspace = true }
+schemars = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+subtle = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+http-body-util = "0.1"
+mime = "0.3"
+proptest = "1"
+
+# The lib target keeps the short name: integration tests and the CLI
+# import recall_server::, while the published package carries the
+# recall-mcp- prefix (see workspace Cargo.toml).
+[lib]
+name = "recall_server"
+path = "src/lib.rs"
